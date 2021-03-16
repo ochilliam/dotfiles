@@ -1,6 +1,42 @@
 #!/usr/bin/env bash
 
-echo "HELLO WORLD $@"
+set -Eeuo pipefail # fail fast
+trap cleanup SIGINT SIGTERM ERR EXIT # trap these exits and run the defined cleanup method
+
+# Make sure we have a reference to where this script lives
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
+# The prefix for extension commands
+command_prefix="dot"
+
+# This method is run upon exit, allowing for any necessary cleanup
+cleanup() {
+    trap - SIGINT SIGTERM ERR EXIT
+    # script cleanup here
+}
+
+usage() {
+    cat <<EOF
+Usage: $(basename "${BASH_SOURCE[0]}") [-h]
+
+Create dotfiles symlinks in the home directory of:
+
+* Any files ending in ".symlink" in the dotfiles code
+* ~/.config if it does not exist
+    * Top-level files from \$DOTFILES_HOME/config will then be symlinked
+* ~/.vimrc will symlink to \$DOTFILES_HOME/config/nvim/init.vim
+* ~/.vim/ will symlink to \$DOTFILES_HOME/config/nvim
+
+Available options:
+
+-h, --help      Print this help and exit
+EOF
+    exit
+}
+
+msg() {
+    echo >&2 -e "${1-}"
+}
 
 die() {
     local msg=$1
@@ -9,8 +45,101 @@ die() {
     exit "$code"
 }
 
-msg() {
-    echo >&2 -e "${1-}"
+setup_colors() {
+  if [[ -t 2 ]] && [[ -z "${NO_COLOR-}" ]] && [[ "${TERM-}" != "dumb" ]]; then
+    NOFORMAT='\033[0m' RED='\033[0;31m' GREEN='\033[0;32m' ORANGE='\033[0;33m' BLUE='\033[0;34m' PURPLE='\033[0;35m' CYAN='\033[0;36m' YELLOW='\033[1;33m'
+  else
+    NOFORMAT='' RED='' GREEN='' ORANGE='' BLUE='' PURPLE='' CYAN='' YELLOW=''
+  fi
 }
 
-die "Temp Boop"
+get_linkables() {
+    find -H "$DOTFILES" -maxdepth 3 -name '*.symlink'
+}
+
+skip() {
+    msg "${YELLOW}SKIP${NOFORMAT} $@"
+}
+
+create() {
+    msg "${GREEN}CREATE${NOFORMAT} $@"
+}
+
+setup_symlinks() {
+    msg "${BLUE}Creating symlinks${NOFORMAT}"
+
+    # TODO: is this really needed anymore?
+    # if [ ! -e "$HOME/.dotfiles" ]; then
+    #     info "Adding symlink to dotfiles at $HOME/.dotfiles"
+    #     ln -s "$DOTFILES" ~/.dotfiles
+    # fi
+
+    for file in $(get_linkables) ; do
+        target="$HOME/.$(basename "$file" '.symlink')"
+        if [ -e "$target" ]; then
+            skip "~${target#$HOME}"
+        else
+            create "$file"
+            ln -s "$file" "$target"
+        fi
+    done
+
+    echo -e
+    msg "${BLUE}installing to ~/.config${NOFORMAT}"
+    if [ ! -d "$HOME/.config" ]; then
+        create "~/.config"
+        mkdir -p "$HOME/.config"
+    fi
+
+    config_files=$(find "$DOTFILES/config" -maxdepth 1 2>/dev/null)
+    for config in $config_files; do
+        target="$HOME/.config/$(basename "$config")"
+        if [ -e "$target" ]; then
+            skip "~${target#$HOME}"
+        else
+            create "$config"
+            ln -s "$config" "$target"
+        fi
+    done
+
+    # create vim symlinks
+    # As I have moved off of vim as my full time editor in favor of neovim,
+    # I feel it doesn't make sense to leave my vimrc intact in the dotfiles repo
+    # as it is not really being actively maintained. However, I would still
+    # like to configure vim, so lets symlink ~/.vimrc and ~/.vim over to their
+    # neovim equivalent.
+
+    echo -e
+    msg "${BLUE}Creating vim symlinks${NOFORMAT}"
+    VIMFILES=( "$HOME/.vim:$DOTFILES/config/nvim"
+            "$HOME/.vimrc:$DOTFILES/config/nvim/init.vim" )
+
+    for file in "${VIMFILES[@]}"; do
+        KEY=${file%%:*}
+        VALUE=${file#*:}
+        if [ -e "${KEY}" ]; then
+            skip "$KEY"
+        else
+            create "$KEY"
+            ln -s "${VALUE}" "${KEY}"
+        fi
+    done
+}
+
+parse_params() {
+    flag=0
+    param=''
+
+    while :; do
+        case "${1-}" in
+            -h | --help) usage ;;
+            -?*) die "${RED}Unknown option:${NOFORMAT} $1" ;;
+            *) break ;;
+        esac
+    done
+}
+
+setup_colors
+parse_params "$@"
+
+setup_symlinks
