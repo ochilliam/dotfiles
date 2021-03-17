@@ -7,7 +7,7 @@ trap cleanup SIGINT SIGTERM ERR EXIT # trap these exits and run the defined clea
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 
 # The prefix for extension commands
-command_prefix="dot"
+command_prefix="$(basename ${BASH_SOURCE[0]})"
 
 # This method is run upon exit, allowing for any necessary cleanup
 cleanup() {
@@ -56,17 +56,18 @@ parse_params() {
     param=''
 
     while :; do
-        if [[ -n "$1" ]] && ! [[ "$1" =~ ^-. ]]; then
-            if [[ -x "$(command -v $command_prefix-$1)" ]]; then
-                command="$(which $command_prefix-$1)"
+        arg="${1-}"
+        if [[ -n "$arg" ]] && ! [[ "$arg" =~ ^-. ]]; then
+            if [[ -x "$(command -v $command_prefix-$arg)" ]]; then
+                command="$(which $command_prefix-$arg)"
                 shift
-                bash "$command" "$@"
+                source "$command" "$@"
                 exit $?
             else
-                die "Command not found: $command_prefix-$param"
+                die "Command not found: $command_prefix-$arg"
             fi
         else
-            case "${1-}" in
+            case "$arg" in
                 -h | --help) usage ;;
                 -v | --verbose) set -x ;;
                 --no-color) NO_COLOR=1 ;;
@@ -76,7 +77,7 @@ parse_params() {
                     shift
                     ;;
                 -?*)
-                    die "${RED}Unknown option:${NOFORMAT} $1"
+                    die "${RED}Unknown option:${NOFORMAT} $arg"
                     ;;
                 *) break ;;
             esac
