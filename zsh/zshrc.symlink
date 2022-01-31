@@ -217,6 +217,7 @@ alias ta='tmux attach'
 alias tls='tmux ls'
 alias tat='tmux attach -t'
 alias tns='tmux new-session -s'
+alias p4="$ANDROID_HOME/emulator/emulator -avd Pixel_4_XL_API_29"
 
 alias lpath='echo $PATH | tr ":" "\n"' # list the PATH separated by new lines
 
