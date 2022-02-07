@@ -136,9 +136,9 @@
     default = current
 [branch]
     # set up 'git pull' to rebase instead of merge
-    ; autosetuprebase = always
+    # autosetuprebase = always
 [pull]
-    ; rebase = true
+    rebase = false 
 [diff]
     renames = copies
     mnemonicprefix = true
